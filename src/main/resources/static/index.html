@@ -2,47 +2,105 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel Proxmox</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Proxmox VM Manager</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="container">
-    <h1>Gestión de VMs</h1>
+<h1>Gestor de VMs Proxmox</h1>
 
-    <label>VMID: <input type="number" id="vmid"></label>
-    <label>Nombre: <input type="text" id="nombre"></label>
+<div id="mensaje" style="display:none; color: blue;">Por favor espera mientras se crea la VM...</div>
 
-    <div class="buttons">
-        <button id="crearBtn">Crear VM</button>
-        <button id="actualizarBtn">Actualizar vm_id y túnel</button>
-    </div>
+<form id="formCrear">
+    VMID: <input type="number" name="newid" required>
+    Nombre: <input type="text" name="nombre" required>
+    <button type="submit">Crear VM</button>
+</form>
 
-    <div id="resultado"></div>
-</div>
+<h2>VMs Creadas</h2>
+<table id="tablaVMs">
+    <thead>
+    <tr>
+        <th>VMID</th>
+        <th>Nombre</th>
+        <th>SSH</th>
+        <th>Acciones</th>
+    </tr>
+    </thead>
+    <tbody>
+    <!-- Se llena dinámicamente -->
+    </tbody>
+</table>
 
 <script>
-    const apiBase = "/vm"; // Spring Boot sirve en el mismo host
+    const apiUrl = "/vm";
 
-    document.getElementById("crearBtn").addEventListener("click", async () => {
-        const vmid = document.getElementById("vmid").value;
-        const nombre = document.getElementById("nombre").value;
+    // Función para cargar la tabla
+    async function cargarVMs() {
+        const resp = await fetch(`${apiUrl}/list`);
+        const vms = await resp.json();
+        const tbody = document.querySelector("#tablaVMs tbody");
+        tbody.innerHTML = "";
+        vms.forEach(vm => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+            <td>${vm.vmid}</td>
+            <td>${vm.nombre}</td>
+            <td>ssh -p ${vm.vmid + 2222} ubuntu@52.155.56.140</td>
+            <td>
+                <button onclick="apagarVM(${vm.vmid})">Apagar</button>
+                <button onclick="eliminarVM(${vm.vmid})">Eliminar</button>
+            </td>`;
+            tbody.appendChild(tr);
+        });
+    }
 
-        const resp = await fetch(`${apiBase}/crear?newid=${vmid}&nombre=${nombre}`, { method: "POST" });
-        const data = await resp.json();
-        document.getElementById("resultado").innerText = data.ok
-            ? "VM creada con ID: " + data.vmid
-            : "Error: " + data.error;
+    // Función para apagar VM
+    async function apagarVM(vmid) {
+        await fetch(`${apiUrl}/stopVM?vmid=${vmid}`, { method: "POST" });
+        alert(`VM ${vmid} apagada`);
+        cargarVMs();
+    }
+
+    // Función para eliminar VM
+    async function eliminarVM(vmid) {
+        await fetch(`${apiUrl}/deleteVM?vmid=${vmid}`, { method: "POST" });
+        alert(`VM ${vmid} eliminada`);
+        cargarVMs();
+    }
+
+    // Crear VM con delays
+    document.getElementById("formCrear").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const newid = form.newid.value;
+        const nombre = form.nombre.value;
+        const mensaje = document.getElementById("mensaje");
+        mensaje.style.display = "block";
+
+        try {
+            // Clonar
+            await fetch(`${apiUrl}/crearClone?newid=${newid}&nombre=${nombre}`, { method: "POST" });
+            await new Promise(r => setTimeout(r, 20000));
+
+            // Start
+            await fetch(`${apiUrl}/startVM?vmid=${newid}`, { method: "POST" });
+            await new Promise(r => setTimeout(r, 20000));
+
+            // Actualizar vm_id y reiniciar túnel
+            await fetch(`${apiUrl}/updateVMID?vmid=${newid}`, { method: "POST" });
+
+            alert(`VM ${nombre} creada correctamente con VMID ${newid}`);
+            cargarVMs();
+        } catch (err) {
+            console.error(err);
+            alert("Ocurrió un error durante la creación de la VM");
+        } finally {
+            mensaje.style.display = "none";
+        }
     });
 
-    document.getElementById("actualizarBtn").addEventListener("click", async () => {
-        const vmid = document.getElementById("vmid").value;
-
-        const resp = await fetch(`${apiBase}/actualizar-vmid?vmid=${vmid}`, { method: "POST" });
-        const data = await resp.json();
-        document.getElementById("resultado").innerText = data.ok
-            ? "vm_id actualizado. Comando SSH: " + data.ssh
-            : "Error: " + data.error;
-    });
+    // Cargar tabla al iniciar
+    cargarVMs();
 </script>
 </body>
 </html>

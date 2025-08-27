@@ -1,78 +1,127 @@
 package com.example.proxmoxwebapp;
 
+import kong.unirest.HttpResponse;
 import kong.unirest.Unirest;
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.json.JSONObject;
+import org.json.JSONArray;
+
+import java.util.ArrayList;
+import java.util.List;
+
+
 
 @Service
 public class ProxmoxService {
 
     @Value("${proxmox.api.token}")
-    private String token;
+    private String Token;
 
     private final String apiUrl = "https://proxmox.ecoraline.dev/api2/json";
-    private final String apiToken = token;
+    private final String apiToken = "PVEAPIToken=root@pam!mitoken=aeac7680-d3dc-40cc-88c7-e2bc956df1e6";
     private final String node = "proxmox-lab";
-    private final String templateId = "100"; // ID de tu template
+    private final String templateId = "100"; // ID del template base
 
-    public String getApiUrl() { return apiUrl; }
-    public String getApiToken() { return apiToken; }
-    public String getNode() { return node; }
+    // ---------------- Clonar VM ----------------
+    public void clonarVM(int newid, String nombre) throws Exception {
+        String body = "newid=" + newid +
+                "&name=" + nombre +
+                "&target=" + node +
+                "&full=1&storage=local-lvm";
 
-    // Clonar + iniciar VM
-    public String crearVM(int newid, String nombre) throws Exception {
-
-        // 1️⃣ Clonar template
-        String cloneBody = "newid=" + newid + "&name=" + nombre + "&target=" + node + "&full=1&storage=local-lvm";
-        String cloneResp = Unirest.post(apiUrl + "/nodes/" + node + "/qemu/" + templateId + "/clone")
+        HttpResponse<String> response = Unirest.post(apiUrl + "/nodes/" + node + "/qemu/" + templateId + "/clone")
                 .header("Authorization", apiToken)
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("User-Agent", "SpringBoot")
-                .body(cloneBody)
-                .asString()
-                .getBody();
-
-        // Extraer vmid desde la respuesta tipo UPID:...
-        String vmid = cloneResp.split(":")[5]; // Proxmox devuelve UPID:node:taskid:...:qmclone:100:...
-        if (vmid == null || vmid.isEmpty()) vmid = String.valueOf(newid);
-        System.out.println("Clonada VM con ID: " + vmid);
-
-        Thread.sleep(9000); // espera 5 segundos, puedes ajustar el tiempo
-
-        // 2️⃣ Iniciar VM
-        Unirest.post(apiUrl + "/nodes/" + node + "/qemu/" + newid + "/status/start")
-                .header("Authorization", apiToken)
+                .header("User-Agent", "ProxmoxWebApp")
+                .body(body)
                 .asString();
 
-        return vmid;
-    }
-    public JSONArray listarVMsConPuertos() throws Exception {
-        String resp = Unirest.get(apiUrl + "/nodes/" + node + "/qemu")
-                .header("Authorization", apiToken)
-                .asString()
-                .getBody();
-
-        JSONObject json = new JSONObject(resp);
-        JSONArray vms = json.getJSONArray("data");
-
-        int BASE_SSH = 2222;
-        int BASE_HTTP = 3000;
-
-        JSONArray result = new JSONArray();
-
-        for (int i = 0; i < vms.length(); i++) {
-            JSONObject vm = vms.getJSONObject(i);
-            JSONObject vmInfo = new JSONObject();
-            vmInfo.put("vmid", vm.getInt("vmid"));
-            vmInfo.put("name", vm.getString("name"));
-            vmInfo.put("status", vm.getString("status"));
-            vmInfo.put("sshPort", BASE_SSH + vm.getInt("vmid"));
-            vmInfo.put("httpPort", BASE_HTTP + vm.getInt("vmid"));
-            result.put(vmInfo);
+        if (!response.isSuccess()) {
+            throw new Exception("Error clonando VM: " + response.getBody());
         }
+    }
 
-        return result;
+    // ---------------- Iniciar VM ----------------
+    public void startVM(int vmid) throws Exception {
+        HttpResponse<String> response = Unirest.post(apiUrl + "/nodes/" + node + "/qemu/" + vmid + "/status/start")
+                .header("Authorization", apiToken)
+                .header("User-Agent", "ProxmoxWebApp")
+                .asString();
+
+        if (!response.isSuccess()) {
+            throw new Exception("Error iniciando VM: " + response.getBody());
+        }
+    }
+
+    // ---------------- Actualizar vm_id ----------------
+    public void updateVMID(int vmid) throws Exception {
+        JSONArray cmdArray = new JSONArray();
+        cmdArray.put("bash");
+        cmdArray.put("-lc");
+        cmdArray.put("echo '" + vmid + "' > /etc/vm_id && systemctl restart tunnel.service");
+
+        JSONObject agentBody = new JSONObject();
+        agentBody.put("command", cmdArray);
+
+        HttpResponse<String> response = Unirest.post(apiUrl + "/nodes/" + node + "/qemu/" + vmid + "/agent/exec")
+                .header("Authorization", apiToken)
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "ProxmoxWebApp")
+                .body(agentBody.toString())
+                .asString();
+
+        if (!response.isSuccess()) {
+            throw new Exception("Error actualizando vm_id: " + response.getBody());
+        }
+    }
+
+    // ---------------- Apagar VM ----------------
+    public void stopVM(int vmid) throws Exception {
+        HttpResponse<String> response = Unirest.post(apiUrl + "/nodes/" + node + "/qemu/" + vmid + "/status/stop")
+                .header("Authorization", apiToken)
+                .header("User-Agent", "ProxmoxWebApp")
+                .asString();
+
+        if (!response.isSuccess()) {
+            throw new Exception("Error apagando VM: " + response.getBody());
+        }
+    }
+
+    // ---------------- Eliminar VM ----------------
+    public void deleteVM(int vmid) throws Exception {
+        HttpResponse<String> response = Unirest.delete(apiUrl + "/nodes/" + node + "/qemu/" + vmid)
+                .header("Authorization", apiToken)
+                .header("User-Agent", "ProxmoxWebApp")
+                .asString();
+
+        if (!response.isSuccess()) {
+            throw new Exception("Error eliminando VM: " + response.getBody());
+        }
+    }
+
+    // ---------------- Listar VMs ----------------
+    public List<VMData> listVMs() throws Exception {
+        HttpResponse<String> response = Unirest.get(apiUrl + "/nodes/" + node + "/qemu")
+                .header("Authorization", apiToken)
+                .header("User-Agent", "ProxmoxWebApp")
+                .asString();
+
+        List<VMData> lista = new ArrayList<>();
+        if (response.isSuccess()) {
+            JSONObject json = new JSONObject(response.getBody());
+            JSONArray data = json.getJSONArray("data");
+            for (int i = 0; i < data.length(); i++) {
+                JSONObject vm = data.getJSONObject(i);
+                int vmid = vm.getInt("vmid");
+                String nombre = vm.getString("name");
+                if (vmid > 100 && vmid <200){
+                    if(vmid == 103 || vmid == 120) continue; // Saltar el ID 103 y 120
+                    lista.add(new VMData(vmid, nombre));
+                }
+            }
+        }
+        System.out.println(lista);
+        return lista;
     }
 }
