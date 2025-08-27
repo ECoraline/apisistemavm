@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Proxmox</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+    <h1>Gestión de VMs</h1>
+
+    <label>VMID: <input type="number" id="vmid"></label>
+    <label>Nombre: <input type="text" id="nombre"></label>
+
+    <div class="buttons">
+        <button id="crearBtn">Crear VM</button>
+        <button id="actualizarBtn">Actualizar vm_id y túnel</button>
+    </div>
+
+    <div id="resultado"></div>
+</div>
+
+<script>
+    const apiBase = "/vm"; // Spring Boot sirve en el mismo host
+
+    document.getElementById("crearBtn").addEventListener("click", async () => {
+        const vmid = document.getElementById("vmid").value;
+        const nombre = document.getElementById("nombre").value;
+
+        const resp = await fetch(`${apiBase}/crear?newid=${vmid}&nombre=${nombre}`, { method: "POST" });
+        const data = await resp.json();
+        document.getElementById("resultado").innerText = data.ok
+            ? "VM creada con ID: " + data.vmid
+            : "Error: " + data.error;
+    });
+
+    document.getElementById("actualizarBtn").addEventListener("click", async () => {
+        const vmid = document.getElementById("vmid").value;
+
+        const resp = await fetch(`${apiBase}/actualizar-vmid?vmid=${vmid}`, { method: "POST" });
+        const data = await resp.json();
+        document.getElementById("resultado").innerText = data.ok
+            ? "vm_id actualizado. Comando SSH: " + data.ssh
+            : "Error: " + data.error;
+    });
+</script>
+</body>
+</html>
