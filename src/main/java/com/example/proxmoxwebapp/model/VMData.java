@@ -1,4 +1,4 @@
-package com.example.proxmoxwebapp;
+package com.example.proxmoxwebapp.model;
 
 public class VMData {
     private int vmid;

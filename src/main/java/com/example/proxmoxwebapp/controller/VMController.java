@@ -1,5 +1,7 @@
-package com.example.proxmoxwebapp;
+package com.example.proxmoxwebapp.controller;
 
+import com.example.proxmoxwebapp.model.VMData;
+import com.example.proxmoxwebapp.service.ProxmoxService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 

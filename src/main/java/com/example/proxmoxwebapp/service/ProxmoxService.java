@@ -1,5 +1,6 @@
-package com.example.proxmoxwebapp;
+package com.example.proxmoxwebapp.service;
 
+import com.example.proxmoxwebapp.model.VMData;
 import kong.unirest.HttpResponse;
 import kong.unirest.Unirest;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,8 +16,6 @@ import java.util.List;
 @Service
 public class ProxmoxService {
 
-    @Value("${proxmox.api.token}")
-    private String Token;
 
     private final String apiUrl = "https://proxmox.ecoraline.dev/api2/json";
     private final String apiToken = "PVEAPIToken=root@pam!mitoken=aeac7680-d3dc-40cc-88c7-e2bc956df1e6";
