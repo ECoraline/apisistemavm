@@ -11,10 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 
-
 @Service
 public class ProxmoxService {
-
 
     private final String apiUrl = "https://proxmox.ecoraline.dev/api2/json";
     private final String apiToken = "PVEAPIToken=root@pam!mitoken=aeac7680-d3dc-40cc-88c7-e2bc956df1e6";
@@ -38,6 +36,7 @@ public class ProxmoxService {
         if (!response.isSuccess()) {
             throw new Exception("Error clonando VM: " + response.getBody());
         }
+        System.out.println("se recibe llamada");
     }
 
     // ---------------- Iniciar VM ----------------
@@ -113,13 +112,14 @@ public class ProxmoxService {
                 JSONObject vm = data.getJSONObject(i);
                 int vmid = vm.getInt("vmid");
                 String nombre = vm.getString("name");
-                if (vmid > 100 && vmid <200){
-                    if(vmid == 103 || vmid == 120) continue; // Saltar el ID 103 y 120
-                    lista.add(new VMData(vmid, nombre));
+                String status = vm.getString("status");
+                if (vmid > 100 && vmid < 200) {
+                    if (vmid == 103 || vmid == 120) continue; // Saltar el ID 103 y 120
+                    lista.add(new VMData(vmid, nombre, status));
                 }
             }
         }
-        System.out.println(lista);
         return lista;
     }
+
 }

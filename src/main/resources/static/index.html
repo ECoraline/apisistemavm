@@ -1,106 +1,131 @@
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-        <meta charset="UTF-8">
-        <title>Proxmox VM Manager</title>
-        <link rel="stylesheet" href="styles.css">
-    </head>
-    <body>
-    <h1>Gestor de Maquinas Virutuales "SICREP"</h1>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Proxmox VM Manager</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<h1>Gestor de Maquinas Virutuales "SICREP"</h1>
 
-    <div id="mensaje" style="display:none; color: blue;">Por favor espera mientras se crea la VM...</div>
+<div id="mensaje" style="display:none; color: blue;">Por favor espera mientras se crea la VM...</div>
 
-    <form id="formCrear">
-        VMID (100-200): <input type="number" name="newid" required>
-        Nombre: <input type="text" name="nombre" required>
-        <button type="submit">Crear VM</button>
-    </form>
+<form id="formCrear">
+    VMID (100-200): <input type="number" name="newid" required>
+    Nombre: <input type="text" name="nombre" required>
+    <button type="submit">Crear VM</button>
+</form>
 
-    <h2>VMs Creadas</h2>
-    <table id="tablaVMs">
-        <thead>
-        <tr>
-            <th>VMID</th>
-            <th>Nombre</th>
-            <th>SSH</th>
-            <th>Acciones</th>
-        </tr>
-        </thead>
-        <tbody>
-        <!-- Se llena dinámicamente -->
-        </tbod      y>
-    </table>
+<h2>VMs Creadas</h2>
+<table id="tablaVMs">
+    <thead>
+    <tr>
+        <th>VMID</th>
+        <th>Nombre</th>
+        <th>Estado</th>
+        <th>SSH</th>
+        <th>Acciones</th>
+    </tr>
+    </thead>
+    <tbody>
+    <!-- Se llena dinámicamente -->
+    </tbody>
+</table>
 
-    <script>
-        const apiUrl = "/vm";
 
-        // Función para cargar la tabla
-        async function cargarVMs() {
-            const resp = await fetch(`${apiUrl}/list`);
-            const vms = await resp.json();
-            const tbody = document.querySelector("#tablaVMs tbody");
-            tbody.innerHTML = "";
-            vms.forEach(vm => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
+<script>
+    const apiUrl = "/vm";
+
+    // Función para cargar la tabla
+    async function cargarVMs() {
+        const resp = await fetch(`${apiUrl}/list`);
+        const vms = await resp.json();
+        const tbody = document.querySelector("#tablaVMs tbody");
+        tbody.innerHTML = "";
+        vms.forEach(vm => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
                 <td>${vm.vmid}</td>
                 <td>${vm.nombre}</td>
+                <td>${vm.status === "running" ? "🟢 Encendida" : "🔴 Apagada"}</td>
                 <td>ssh -p ${vm.vmid + 2222} ubuntu@52.155.56.140</td>
                 <td>
-                    <button onclick="apagarVM(${vm.vmid})">Apagar</button>
-                    <button onclick="eliminarVM(${vm.vmid})">Eliminar</button>
-                </td>`;
-                tbody.appendChild(tr);
-            });
-        }
+            ${vm.status !== "running"
+                ? `<button onclick="encenderVM(${vm.vmid})">Encender</button>`
+                : `<button onclick="apagarVM(${vm.vmid})">Apagar</button>`}
+            <button onclick="eliminarVM(${vm.vmid})">Eliminar</button>
+        </td>`;
+            tbody.appendChild(tr);
+        });
+    }
 
-        // Función para apagar VM
-        async function apagarVM(vmid) {
-            await fetch(`${apiUrl}/stopVM?vmid=${vmid}`, { method: "POST" });
-            alert(`VM ${vmid} apagada`);
-            cargarVMs();
-        }
+    async function encenderVM(vmid) {
+        await fetch(`${apiUrl}/startVM?vmid=${vmid}`, {method: "POST"});
+        alert(`VM ${vmid} encendida`);
+        cargarVMs();
+    }
 
-        // Función para eliminar VM
-        async function eliminarVM(vmid) {
-            await fetch(`${apiUrl}/deleteVM?vmid=${vmid}`, { method: "POST" });
-            alert(`VM ${vmid} eliminada`);
-            cargarVMs();
-        }
 
-        // Crear VM con delays
-        document.getElementById("formCrear").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            const newid = form.newid.value;
-            const nombre = form.nombre.value;
-            const mensaje = document.getElementById("mensaje");
+    // Función para apagar VM
+    async function apagarVM(vmid) {
+        await fetch(`${apiUrl}/stopVM?vmid=${vmid}`, {method: "POST"});
+        alert(`VM ${vmid} apagada`);
+        cargarVMs();
+    }
+
+    // Función para eliminar VM
+    async function eliminarVM(vmid) {
+        await fetch(`${apiUrl}/deleteVM?vmid=${vmid}`, {method: "POST"});
+        alert(`VM ${vmid} eliminada`);
+        cargarVMs();
+    }
+
+    // Crear VM con delays
+    document.getElementById("formCrear").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const newid = parseInt(form.newid.value);
+        const nombre = form.nombre.value;
+        const mensaje = document.getElementById("mensaje");
+
+        try {
+            // 1. Verificar si ya existe el VMID
+            const resp = await fetch(`${apiUrl}/list`);
+            const vms = await resp.json();
+            const existe = vms.some(vm => vm.vmid === newid);
+
+            if (existe) {
+                alert(`El VMID ${newid} ya existe. Elige otro ID.`);
+                return; // detener ejecución
+            }
+
+            // 2. Mostrar mensaje de espera
             mensaje.style.display = "block";
 
-            try {
-                // Clonar
-                await fetch(`${apiUrl}/crearClone?newid=${newid}&nombre=${nombre}`, { method: "POST" });
-                await new Promise(r => setTimeout(r, 20000));
+            // 3. Clonar
+            await fetch(`${apiUrl}/crearClone?newid=${newid}&nombre=${nombre}`, {method: "POST"});
+            await new Promise(r => setTimeout(r, 20000));
 
-                // Start
-                await fetch(`${apiUrl}/startVM?vmid=${newid}`, { method: "POST" });
-                await new Promise(r => setTimeout(r, 20000));
+            // 4. Start
+            await fetch(`${apiUrl}/startVM?vmid=${newid}`, {method: "POST"});
+            await new Promise(r => setTimeout(r, 20000));
 
-                // Actualizar vm_id y reiniciar túnel
-                await fetch(`${apiUrl}/updateVMID?vmid=${newid}`, { method: "POST" });
+            // 5. Actualizar vm_id y reiniciar túnel
+            await fetch(`${apiUrl}/updateVMID?vmid=${newid}`, {method: "POST"});
 
-                alert(`VM ${nombre} creada correctamente con VMID ${newid}`);
-                cargarVMs();
-            } catch (err) {
-                console.error(err);
-                alert("Ocurrió un error durante la creación de la VM");
-            } finally {
-                mensaje.style.display = "none";
-            }
-        });
+            alert(`VM ${nombre} creada correctamente con VMID ${newid}`);
+            cargarVMs();
+        } catch (err) {
+            console.error(err);
+            alert("Ocurrió un error durante la creación de la VM");
+        } finally {
+            mensaje.style.display = "none";
+        }
+    });
 
-        // Cargar tabla al iniciar
-        cargarVMs();
-    </script>
-    </body>
-    </html>
+
+    // Cargar tabla al iniciar
+    cargarVMs();
+</script>
+</body>
+</html>
